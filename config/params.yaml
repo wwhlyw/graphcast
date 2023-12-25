@@ -1,0 +1,31 @@
+model:
+  splits: 6
+  processing_steps: 16
+  latent_dims: 512
+  vm_in_channels: 3
+  em_in_channels: 4
+  eg2m_in_channels: 4
+  em2g_in_channels: 4
+  variables: 24
+  forcings: 2
+  constant: 3
+  radius: 0.03
+data:
+  lon_path: /home/wwh/graphcast/location/lons.npy
+  lat_path: /home/wwh/graphcast/location/lats.npy
+  input_timestamps: 2
+  output_timestamps: 1
+  mean: /ssd1/hrrr_data/stat/mean_crop.npy
+  std: /ssd1/hrrr_data/stat/std_crop.npy
+  mode: train
+  train: /ssd1/hrrr_data/train
+  valid: /ssd1/hrrr_data/valid
+  batch_size: 16
+  sj: /home/wwh/graphcast/location/sj.npy
+  wj: /home/wwh/graphcast/location/wj.npy
+  ai: /home/wwh/graphcast/location/ai.npy
+train:
+  phase1_epoch: 1
+  phase2_epoch: 1
+  phase3_epoch: 1
+  reset_steps: 10
