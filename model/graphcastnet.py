@@ -65,6 +65,15 @@ class GraphCastNet(nn.Module):
             dst_idx=m2g_dst_idx
         )
     def forward(self, grid_node_feats):
+        B, _, _ = grid_node_feats.shape
+        self.mesh_node_feats = self.mesh_node_feats.unsqueeze(0).expand([B, -1, -1])
+        self.mesh_edge_feats = self.mesh_edge_feats.unsqueeze(0).expand([B, -1, -1])
+        self.g2m_edge_feats = self.g2m_edge_feats.unsqueeze(0).expand([B, -1, -1])
+        self.m2g_edge_feats = self.m2g_edge_feats.unsqueeze(0).expand([B, -1, -1])
+        print(self.mesh_node_feats.shape)
+        print(self.mesh_edge_feats.shape)
+        print(self.g2m_edge_feats.shape)
+        print(self.m2g_edge_feats.shape)
         vg, vm, em, _, em2g = self.encoder(
             grid_node_feats,
             self.mesh_node_feats,

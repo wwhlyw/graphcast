@@ -53,7 +53,7 @@ def get_bipartite_graph_spatial_features(
     receivers_features.append(np.sin(receivers_phi))
 
     senders_features = np.stack(senders_features, axis=-1)
-    receivers_features = np.stack(receivers, axis=-1)
+    receivers_features = np.stack(receivers_features, axis=-1)
 
     # add relative positions
     # compute some edge features
@@ -142,6 +142,7 @@ def get_homogeneous_graph_spatial_features(
     edge_features.append(relative_position / max_edge_distance)
 
     edge_features = np.concatenate(edge_features, axis=-1)
+    return edge_features
 
 
 def get_homogeneous_relative_position_in_receiver_local_coordinates(

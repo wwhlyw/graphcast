@@ -51,12 +51,15 @@ class InteractionLayer(nn.Module):
             src_node_feats, dst_node_feats, edge_feats = feats[0], feats[1], feats[2]
 
         # [batch, grid_num, feat]
-        src_feats = torch.index_select(src_node_feats, self.src_idx, axis=1)
-        dst_feats = torch.index_select(dst_node_feats, self.dst_idx, axis=1)
-        update_edge_feats = self.edge_fn(torch.concat((src_feats, dst_feats, edge_feats), axis=-1))
+        src_feats = torch.index_select(src_node_feats, dim=1, index=self.src_idx)
 
-        sum_edge_feats = scatter(edge_feats, self.dst_idx, axis=1, reduce='sum')
-        update_dst_feats = torch.concat((dst_node_feats, sum_edge_feats), axis=-1)
+        dst_feats = torch.index_select(dst_node_feats, dim=1, index=self.dst_idx)
+        update_edge_feats = self.edge_fn(torch.concat((src_feats, dst_feats, edge_feats), axis=-1))
+        print('self.dst_idx:',self.dst_idx.shape)
+        sum_edge_feats = scatter(edge_feats, self.dst_idx, dim=1, reduce='sum')
+        print('sum_edge_feats:',sum_edge_feats.shape)
+        print('dst_node_feats', dst_node_feats.shape)
+        update_dst_feats = self.node_fn(torch.concat((dst_node_feats, sum_edge_feats), axis=-1))
  
         return (update_dst_feats + dst_node_feats, update_edge_feats + edge_feats)
      
@@ -160,13 +163,14 @@ class Encoder(nn.Module):
         g2m_edge_feats, 
         m2g_edge_feats
     ):
+
         vg, vm, em, eg2m, em2g = self.feature_embedder(grid_node_feats,
                                                        mesh_node_feats,
                                                        mesh_edge_feats,
                                                        g2m_edge_feats,
                                                        m2g_edge_feats) 
-
-        vg, vm, eg2m = self.g2m_gnn(eg2m, vm, vg) 
+        
+        vg, vm, eg2m = self.g2m_gnn(vg, vm, eg2m) 
         return vg, vm, em, eg2m, em2g      
 
 

@@ -1,7 +1,7 @@
 model:
   splits: 6
   processing_steps: 16
-  latent_dims: 512
+  latent_dims: 24
   vm_in_channels: 3
   em_in_channels: 4
   eg2m_in_channels: 4
@@ -25,7 +25,7 @@ data:
   wj: /home/wwh/graphcast/location/wj.npy
   ai: /home/wwh/graphcast/location/ai.npy
 train:
-  phase1_epoch: 1
-  phase2_epoch: 1
-  phase3_epoch: 1
+  phase1_epoch: 100
+  phase2_epoch: 300
+  phase3_epoch: 500
   reset_steps: 10
