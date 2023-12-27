@@ -133,12 +133,3 @@ class TimeFeature:
     def DayOfYear(self, date):
         return (date.dayofyear - 1) / 365 - 0.5
 
-# filePath = '/ssd1/hrrr_data/train'
-# data = HRRR(file_path=filePath, num_input_timestamps=2, num_label_timestamps=4)
-# dataloader = DataLoader(dataset=data, batch_size=1)
-# for input, label, input_l, label_l in dataloader:
-#     print(input.shape)
-#     print(label.shape)
-#     print(input_l.shape)
-#     print(label_l.shape)
-#     break

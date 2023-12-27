@@ -9,6 +9,7 @@ import torch
 from torch.optim.lr_scheduler import LambdaLR
 import math
 import torch.nn as nn
+from data.dataset import StandardScaler
 
 
 class GraphCast:
@@ -21,10 +22,12 @@ class GraphCast:
         self.lon_path = self.data_config['lon_path']
         self.lat_path = self.data_config['lat_path']
 
-        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         self.raw_grid_lat = np.load(self.lat_path)[253:693,970:1378]
         self.raw_grid_lon = np.load(self.lon_path)[253:693,970:1378]
+
+        self.scaler = StandardScaler() 
 
         # sj, wj, ai
         self.sj = torch.from_numpy(np.load(self.data_config['sj'])).to(self.device)
@@ -94,10 +97,14 @@ class GraphCast:
             input = torch.concat([input, input_forcings, constant], axis=-1).to(self.device).to(torch.float32)
             
             predict = self.model(input)
+            label = label * self.per_variable_level_std + self.per_variable_level_mean
             loss = self.criterion(predict, label)
+            print('predict:', predict[0, :, 4])
+            print('label:', label[0, :, 4])
+
             train_loss.append(loss.item())
-            if i % 100 == 0:
-                print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item() / input.shape[0] / input.shape[1]}')
+            if (i+1) % 100 == 0:
+                print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item()}')
             loss.backward()
             self.optimizer.step()
 
@@ -266,6 +273,8 @@ class GraphCast:
         self.m2g_dst_idx = torch.tensor(grid_indices, dtype=torch.int64).to(self.device)
 
     def _init_model(self):
+        self.per_variable_level_mean = torch.from_numpy(np.load(self.data_config['mean'])).to(self.device)
+        self.per_variable_level_std = torch.from_numpy(np.load(self.data_config['std'])).to(self.device)
         B = self.data_config['batch_size']
         self.mesh_node_feats = self.mesh_node_feats.unsqueeze(0).expand([B, -1, -1])
         self.mesh_edge_feats = self.mesh_edge_feats.unsqueeze(0).expand([B, -1, -1])
@@ -294,6 +303,8 @@ class GraphCast:
             mesh_edge_feats=self.mesh_edge_feats,
             g2m_edge_feats=self.g2m_edge_feats,
             m2g_edge_feats=self.m2g_edge_feats,
+            per_variable_level_mean=self.per_variable_level_mean,
+            per_variable_level_std=self.per_variable_level_std
         ).to(self.device)
 
 
