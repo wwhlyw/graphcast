@@ -23,8 +23,6 @@ class GraphCastNet(nn.Module):
         mesh_edge_feats,
         g2m_edge_feats,
         m2g_edge_feats,
-        per_variable_level_mean,
-        per_variable_level_std,
     ):
         super().__init__()
         self.vg_out_channels = vg_out_channels
@@ -32,8 +30,7 @@ class GraphCastNet(nn.Module):
         self.mesh_edge_feats = mesh_edge_feats
         self.g2m_edge_feats = g2m_edge_feats
         self.m2g_edge_feats = m2g_edge_feats
-        self.per_variable_level_mean = per_variable_level_mean
-        self.per_variable_level_std = per_variable_level_std
+
         self.encoder = Encoder(
             vg_in_channels=vg_in_channels,
             vm_in_channels=vm_in_channels,
@@ -65,15 +62,6 @@ class GraphCastNet(nn.Module):
             dst_idx=m2g_dst_idx
         )
     def forward(self, grid_node_feats):
-        B, _, _ = grid_node_feats.shape
-        self.mesh_node_feats = self.mesh_node_feats.unsqueeze(0).expand([B, -1, -1])
-        self.mesh_edge_feats = self.mesh_edge_feats.unsqueeze(0).expand([B, -1, -1])
-        self.g2m_edge_feats = self.g2m_edge_feats.unsqueeze(0).expand([B, -1, -1])
-        self.m2g_edge_feats = self.m2g_edge_feats.unsqueeze(0).expand([B, -1, -1])
-        print(self.mesh_node_feats.shape)
-        print(self.mesh_edge_feats.shape)
-        print(self.g2m_edge_feats.shape)
-        print(self.m2g_edge_feats.shape)
         vg, vm, em, _, em2g = self.encoder(
             grid_node_feats,
             self.mesh_node_feats,
@@ -82,6 +70,7 @@ class GraphCastNet(nn.Module):
             self.m2g_edge_feats    
         )
         updated_vm, _ = self.processor(vm, em)
-        node_feats = self.decoder(em2g, updated_vm, vg)
-        output = (node_feats * self.per_variable_level_std + self.per_variable_level_mean) + grid_node_feats[:, :, -self.vg_out_channels]
+        node_feats = self.decoder(vg, updated_vm, em2g)
+
+        output = node_feats + grid_node_feats[:, :, self.vg_out_channels: 2 * self.vg_out_channels]
         return output

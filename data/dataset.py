@@ -73,7 +73,6 @@ class HRRR(Dataset):
             input_hour_idx = (global_idx + i) % self.num_samples_per_day
             input_file = self.files[input_day_idx][0]
             if len(input_file.shape) == 1:
-                print("Warning: fake data detected, please check your data")
                 return self.__getitem__(np.random.randint(self.__len__()))
             input_item = input_file[input_hour_idx]
             input_time = [self.files[input_day_idx][1] + "/" + str(input_hour_idx)]
@@ -85,7 +84,6 @@ class HRRR(Dataset):
             label_hour_idx = (global_idx + j + 1) % self.num_samples_per_day
             label_file = self.files[label_day_idx][0]
             if len(label_file.shape) == 1:
-                print("Warning: fake data detected, please check your data")
                 return self.__getitem__(np.random.randint(self.__len__()))
             label_item = label_file[label_hour_idx]
             label_time = [self.files[label_day_idx][1] + "/" + str(label_hour_idx)]

@@ -21,15 +21,16 @@ class GraphCast:
         self.lon_path = self.data_config['lon_path']
         self.lat_path = self.data_config['lat_path']
 
+        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+
         self.raw_grid_lat = np.load(self.lat_path)[253:693,970:1378]
         self.raw_grid_lon = np.load(self.lon_path)[253:693,970:1378]
 
         # sj, wj, ai
-        self.sj = np.load(self.data_config['sj'])
-        self.wj = np.load(self.data_config['wj'])
+        self.sj = torch.from_numpy(np.load(self.data_config['sj'])).to(self.device)
+        self.wj = torch.from_numpy(np.load(self.data_config['wj'])).to(self.device)
         # self.ai = np.load(self.data_config['ai'])
 
-        self.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
         # meshes list initialization
         self._meshes = (icosahedral_mesh.meshes_list(splits=self.model_config['splits']))
         
@@ -79,24 +80,24 @@ class GraphCast:
             self.optimizer.zero_grad()
             
             input = input.to(self.device)
+            label = label.to(self.device)
             input_forcings1 = torch.unsqueeze(input_forcings, dim=1).expand([-1, input.shape[1], -1]).to(self.device)
             input_forcings2 = torch.unsqueeze(label_forcings, dim=1).expand([-1, input.shape[1], -1]).to(self.device)
             input_forcings = torch.concat([input_forcings1, input_forcings2], dim=-1)
             constant = torch.stack([np.cos(self.grid_lat), 
                                     np.cos(self.grid_lon),
                                     np.sin(self.grid_lon)], dim=1).unsqueeze(dim=0).expand([input.shape[0], -1, -1]).to(self.device)
-            allocated_memory = torch.cuda.memory_allocated()
-
+        
             # input.shape[batch, num_grid, features] 
             # [32, 179520, 57]
-            # features:[v_{t-1}, v{t}, f_{t-1}, f_{t}, f_{t+1}, constant] [24, 24, 2, 2, 2, 3]
+            # features:[v_{t-1}, v{t}, f_{t-1}, f_{t}, f_{t+1}, constant] [24+24+2+2+2+3]
             input = torch.concat([input, input_forcings, constant], axis=-1).to(self.device).to(torch.float32)
             
             predict = self.model(input)
             loss = self.criterion(predict, label)
             train_loss.append(loss.item())
             if i % 100 == 0:
-                print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item()}')
+                print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item() / input.shape[0] / input.shape[1]}')
             loss.backward()
             self.optimizer.step()
 
@@ -108,6 +109,7 @@ class GraphCast:
         for i, (input, label, input_forcings, label_forcings) in enumerate(train_loader):
             self.optimizer.zero_grad()
             input = input.to(self.device)
+            label = label.to(self.device)
             predicts = []
             for j in range(steps):
                 input_forcings_new1 = torch.unsqueeze(input_forcings, dim=1).expand([-1, input.shape[1], -1]).to(self.device)
@@ -127,7 +129,7 @@ class GraphCast:
             loss = self.criterion(predict_all, label, steps)
             train_loss.append(loss.item())
             if i % 100 == 0:
-                print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item()}')
+                print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item() / input.shape[1]}')
             loss.backward()
             self.optimizer.step()
 
@@ -222,8 +224,10 @@ class GraphCast:
         self.grid_constant_feats = torch.tensor(senders_node_features, dtype=torch.float32).to(self.device)
         self.mesh_node_feats = torch.tensor(receivers_node_features, dtype=torch.float32).to(self.device)
         self.g2m_edge_feats = torch.tensor(edge_features, dtype=torch.float32).to(self.device)
+      
         self.g2m_src_idx = torch.from_numpy(self.g2m_src_idx).to(self.device)
         self.g2m_dst_idx = torch.from_numpy(self.g2m_dst_idx).to(self.device)
+
     
     def _init_mesh2mesh_graph(self):
         merged_mesh = icosahedral_mesh.merge_meshes(self._meshes)
@@ -234,9 +238,10 @@ class GraphCast:
             senders = senders,
             receivers = receivers,
         )
+
         self.mesh_edge_feats = torch.tensor(edge_features, dtype=torch.float32).to(self.device)
-        self.m2m_src_idx = torch.tensor(senders, dtype=torch.float32).to(self.device)
-        self.m2m_dst_idx = torch.tensor(receivers, dtype=torch.float32).to(self.device)
+        self.m2m_src_idx = torch.tensor(senders, dtype=torch.int64).to(self.device)
+        self.m2m_dst_idx = torch.tensor(receivers, dtype=torch.int64).to(self.device)
 
     def _init_mesh2grid_graph(self):
         grid_indices, mesh_indices = grid_mesh_connectivity.mesh2grid_edge_indices(
@@ -257,12 +262,15 @@ class GraphCast:
             receivers=receivers,
         )
         self.m2g_edge_feats = torch.tensor(edge_features, dtype=torch.float32).to(self.device)
-        self.m2g_src_idx = torch.tensor(mesh_indices, dtype=torch.float32).to(self.device)
-        self.m2g_dst_idx = torch.tensor(grid_indices, dtype=torch.float32).to(self.device)
+        self.m2g_src_idx = torch.tensor(mesh_indices, dtype=torch.int64).to(self.device)
+        self.m2g_dst_idx = torch.tensor(grid_indices, dtype=torch.int64).to(self.device)
 
     def _init_model(self):
-        self.per_variable_level_mean = np.load(self.data_config['mean'])
-        self.per_variable_level_std = np.load(self.data_config['std'])
+        B = self.data_config['batch_size']
+        self.mesh_node_feats = self.mesh_node_feats.unsqueeze(0).expand([B, -1, -1])
+        self.mesh_edge_feats = self.mesh_edge_feats.unsqueeze(0).expand([B, -1, -1])
+        self.g2m_edge_feats = self.g2m_edge_feats.unsqueeze(0).expand([B, -1, -1])
+        self.m2g_edge_feats = self.m2g_edge_feats.unsqueeze(0).expand([B, -1, -1])
 
         input_channels = self.model_config['variables'] * self.data_config['input_timestamps'] \
                         + self.model_config['forcings'] * (self.data_config['input_timestamps'] + 1) \
@@ -286,8 +294,6 @@ class GraphCast:
             mesh_edge_feats=self.mesh_edge_feats,
             g2m_edge_feats=self.g2m_edge_feats,
             m2g_edge_feats=self.m2g_edge_feats,
-            per_variable_level_mean=self.per_variable_level_mean,
-            per_variable_level_std=self.per_variable_level_std
         ).to(self.device)
 
 

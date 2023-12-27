@@ -52,13 +52,12 @@ class InteractionLayer(nn.Module):
 
         # [batch, grid_num, feat]
         src_feats = torch.index_select(src_node_feats, dim=1, index=self.src_idx)
-
         dst_feats = torch.index_select(dst_node_feats, dim=1, index=self.dst_idx)
+
         update_edge_feats = self.edge_fn(torch.concat((src_feats, dst_feats, edge_feats), axis=-1))
-        print('self.dst_idx:',self.dst_idx.shape)
+        
         sum_edge_feats = scatter(edge_feats, self.dst_idx, dim=1, reduce='sum')
-        print('sum_edge_feats:',sum_edge_feats.shape)
-        print('dst_node_feats', dst_node_feats.shape)
+    
         update_dst_feats = self.node_fn(torch.concat((dst_node_feats, sum_edge_feats), axis=-1))
  
         return (update_dst_feats + dst_node_feats, update_edge_feats + edge_feats)

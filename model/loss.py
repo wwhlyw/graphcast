@@ -21,15 +21,16 @@ class Loss(nn.Module):
         # wj:[feature]
         # ai:[location]
         len_features = len(self.sj)
-        len_locations = len(self.ai)
+        # len_locations = len(self.ai)
         B, L, F = predict.shape
-        self.sj = torch.reshape(self.sj, [1, 1, len_features]).expand([B, L, -1])
-        self.wj = torch.reshape(self.wj, [1, 1, len_features]).expand([B, L, -1])
+        if self.sj.dim == 1:
+            self.sj = torch.reshape(self.sj, [1, 1, len_features]).expand([B, L, -1])
+            self.wj = torch.reshape(self.wj, [1, 1, len_features]).expand([B, L, -1])
         # self.ai = torch.reshape(self.ai, [1, len_locations, 1]).expand([B, -1, F])
 
         # loss = self.sj * self.wj * self.ai * torch.pow((predict - target), 2)
         loss = self.sj * self.wj * torch.pow((predict - target), 2)
-        print(loss)
+      
         loss = 1 / (B * T * L) * torch.sum(loss)
 
         return loss           

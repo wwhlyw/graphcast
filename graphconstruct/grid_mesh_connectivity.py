@@ -67,10 +67,12 @@ def mesh2grid_edge_indices(
     return grid_edge_indices, mesh_edge_indices
 
 def mesh2mesh_edge_indices(
-    faces
+    faces,
+    g2m_dst_idx=None
 ):
     senders = np.concatenate([faces[:, 0], faces[:, 1], faces[:, 2]])
-    receivers = np.concatenate([faces[:, 1], faces[:, 2], faces[:, 0]])
+    receivers = np.concatenate([faces[:, 1], faces[:, 2], faces[:, 0]])  
+            
     return senders, receivers
 
 
@@ -80,3 +82,10 @@ def mesh2mesh_edge_indices(
 # grid_edge_indices, mesh_indices = grid2mesh_edges_indices(grid_latitude=lat, grid_longitude=lon, mesh=mesh, radius=0.03)
 # print(grid_edge_indices.shape)
 # print(mesh_indices.shape)
+# import torch
+# input = torch.arange(mesh_indices.shape[0]).unsqueeze(0).unsqueeze(-1)
+# from torch_scatter import scatter
+# output = scatter(input, torch.from_numpy(mesh_indices), dim=1)
+# print(output)
+
+

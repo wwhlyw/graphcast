@@ -1,5 +1,5 @@
 model:
-  splits: 6
+  splits: 0
   processing_steps: 16
   latent_dims: 24
   vm_in_channels: 3
@@ -9,7 +9,7 @@ model:
   variables: 24
   forcings: 2
   constant: 3
-  radius: 0.03
+  radius: 2
 data:
   lon_path: /home/wwh/graphcast/location/lons.npy
   lat_path: /home/wwh/graphcast/location/lats.npy
