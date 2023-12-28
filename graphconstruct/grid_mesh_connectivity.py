@@ -1,15 +1,8 @@
-from . import icosahedral_mesh
+import icosahedral_mesh
 import numpy as np
 import scipy
 import trimesh
-
-
-def grid_lat_lon_to_coordinates(grid_latitude: np.ndarray, grid_longitude: np.ndarray):
-    phi_grid, theta_grid = np.deg2rad(grid_longitude), np.deg2rad(90 - grid_latitude)
-    return np.stack([
-        np.cos(phi_grid) * np.sin(theta_grid),
-        np.sin(phi_grid) * np.sin(theta_grid),
-        np.cos(theta_grid)], axis=-1)
+from utils import *
 
 
 def grid2mesh_edges_indices(
@@ -76,12 +69,16 @@ def mesh2mesh_edge_indices(
     return senders, receivers
 
 
-# lat = np.load('../location/lats.npy')[253:693,970:1378]
-# lon = np.load('../location/lons.npy')[253:693,970:1378]
+
+lat = np.load('../location/lats.npy')[253:693,970:1378]
+lon = np.load('../location/lons.npy')[253:693,970:1378]
+init_mesh = icosahedral_mesh.get_pentagon(5.5)
+mesh = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(7, init_mesh))
+print(len(mesh.vertices))
 # mesh = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(6))
-# grid_edge_indices, mesh_indices = grid2mesh_edges_indices(grid_latitude=lat, grid_longitude=lon, mesh=mesh, radius=0.03)
-# print(grid_edge_indices.shape)
-# print(mesh_indices.shape)
+grid_edge_indices, mesh_indices = grid2mesh_edges_indices(grid_latitude=lat, grid_longitude=lon, mesh=mesh, radius=0.002)
+print(grid_edge_indices.shape)
+print(len(set(mesh_indices)))
 # import torch
 # input = torch.arange(mesh_indices.shape[0]).unsqueeze(0).unsqueeze(-1)
 # from torch_scatter import scatter

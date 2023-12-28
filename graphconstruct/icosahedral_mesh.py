@@ -2,6 +2,7 @@ import numpy as np
 import itertools
 from scipy.spatial import transform
 from typing import NamedTuple
+from utils import *
 
 
 class TriangularMesh(NamedTuple):
@@ -19,13 +20,50 @@ def merge_meshes(mesh_list):
                     faces=np.concatenate([mesh.faces for mesh in mesh_list], axis=0))
 
 
-def meshes_list(splits):
-    current_mesh = get_icosahedron()
+def meshes_list(splits, current_mesh):
+    # current_mesh = get_icosahedron()
     output_meshes = [current_mesh]
     for _ in range(splits):
         current_mesh = split_triangle_face(current_mesh)
         output_meshes.append(current_mesh)
     return output_meshes
+
+def get_pentagon(scale):
+    lat = np.load('/home/wwh/graphcast/location/lats.npy')[253:693,970:1378]
+    lon = np.load('/home/wwh/graphcast/location/lons.npy')[253:693,970:1378]
+    lat_mean = np.mean(lat)
+    lon_mean = np.mean(lon)
+
+    phi = (1 + np.sqrt(5)) / 2
+
+    vertices = np.array([[0, -1, phi],
+                         [0,  1, phi],
+                         [phi, 0,  1],
+                         [1, -phi, 0],
+                         [-phi, 0, 1],
+                         [-1, -phi, 0]])
+    vertices /= np.linalg.norm([1, phi])
+
+    faces = [
+        (0, 2, 1),
+        (1, 4, 0),
+        (3, 2, 0),
+        (0, 3, 5),
+        (0, 4, 5),
+    ]
+
+    grid_center_phi, grid_center_theta = lat_lon_to_spherical(lat_mean, lon_mean)
+    mesh_center_phi, mesh_center_theta = cartesian_to_spherical(vertices[0, 0], vertices[0, 1], vertices[0, 2])
+    rotate_phi, rotate_theta = mesh_center_phi - grid_center_phi, mesh_center_theta-grid_center_theta
+    rotate_matrix =  transform.Rotation.from_euler(
+        "zx", [rotate_phi, rotate_theta]).as_matrix().T
+    vertices = np.dot(rotate_matrix, vertices.T).T
+
+    for i, vertice in enumerate(vertices):
+        vertices[i] = (vertice - vertices[0]) / scale + vertices[0]
+        vertices[i] /= np.linalg.norm(vertice)
+
+    return TriangularMesh(vertices=vertices.astype(np.float32), faces=np.array(faces, dtype=np.int32))
 
 
 def get_icosahedron():
@@ -115,3 +153,7 @@ class _ChildVerticesBuilder:
     def get_all_vertices(self):
         return np.array(self._all_vertices_list)
 
+# init_mesh = get_pentagon(8)
+# mesh = merge_meshes(meshes_list(1, init_mesh))
+# print(mesh.vertices)
+# print(mesh.faces)

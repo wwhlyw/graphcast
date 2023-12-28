@@ -9,7 +9,6 @@ import torch
 from torch.optim.lr_scheduler import LambdaLR
 import math
 import torch.nn as nn
-from data.dataset import StandardScaler
 
 
 class GraphCast:
@@ -25,9 +24,7 @@ class GraphCast:
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         self.raw_grid_lat = np.load(self.lat_path)[253:693,970:1378]
-        self.raw_grid_lon = np.load(self.lon_path)[253:693,970:1378]
-
-        self.scaler = StandardScaler() 
+        self.raw_grid_lon = np.load(self.lon_path)[253:693,970:1378] 
 
         # sj, wj, ai
         self.sj = torch.from_numpy(np.load(self.data_config['sj'])).to(self.device)
@@ -99,20 +96,18 @@ class GraphCast:
             predict = self.model(input)
             label = label * self.per_variable_level_std + self.per_variable_level_mean
             loss = self.criterion(predict, label)
-            print('predict:', predict[0, :, 4])
-            print('label:', label[0, :, 4])
-
+            
             train_loss.append(loss.item())
             if (i+1) % 100 == 0:
                 print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item()}')
             loss.backward()
             self.optimizer.step()
 
-        return torch.mean(train_loss)
+        return torch.mean(torch.tensor(train_loss))
 
     def train_one_epoch_3_phase(self, train_loader, steps, epoch):
         train_loss = []
-        vars = self.model_config['variables']
+        
         for i, (input, label, input_forcings, label_forcings) in enumerate(train_loader):
             self.optimizer.zero_grad()
             input = input.to(self.device)
@@ -140,7 +135,7 @@ class GraphCast:
             loss.backward()
             self.optimizer.step()
 
-        return torch.mean(train_loss) 
+        return torch.mean(torch.tensor(train_loss)) 
 
     def valid(self, out_timestamps=1):
         valid_loader = self._init_data('valid')

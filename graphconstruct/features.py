@@ -100,7 +100,7 @@ def get_bipartite_relative_position_in_receiver_local_coordinates(
     sender_pos_in_rotated_space = rotate_with_matrices(
         edge_rotation_matrices, senders_pos[senders]
     )
-
+  
     return sender_pos_in_rotated_space - receiver_pos_in_rotated_space
 
 def get_rotation_matrices_to_local_coordinates(reference_phi, reference_theta):
