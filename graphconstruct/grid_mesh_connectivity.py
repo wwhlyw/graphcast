@@ -1,8 +1,8 @@
-import icosahedral_mesh
+from . import icosahedral_mesh
 import numpy as np
 import scipy
 import trimesh
-from utils import *
+from .utils import *
 
 
 def grid2mesh_edges_indices(
@@ -70,15 +70,15 @@ def mesh2mesh_edge_indices(
 
 
 
-lat = np.load('../location/lats.npy')[253:693,970:1378]
-lon = np.load('../location/lons.npy')[253:693,970:1378]
-init_mesh = icosahedral_mesh.get_pentagon(5.5)
-mesh = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(7, init_mesh))
-print(len(mesh.vertices))
-# mesh = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(6))
-grid_edge_indices, mesh_indices = grid2mesh_edges_indices(grid_latitude=lat, grid_longitude=lon, mesh=mesh, radius=0.002)
-print(grid_edge_indices.shape)
-print(len(set(mesh_indices)))
+# lat = np.load('../location/lats.npy')[253:693,970:1378]
+# lon = np.load('../location/lons.npy')[253:693,970:1378]
+# init_mesh = icosahedral_mesh.get_pentagon(5.5)
+# mesh = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(7, init_mesh))
+# print(len(mesh.vertices))
+# # mesh = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(6))
+# grid_edge_indices, mesh_indices = grid2mesh_edges_indices(grid_latitude=lat, grid_longitude=lon, mesh=mesh, radius=0.002)
+# print(grid_edge_indices.shape)
+# print(len(set(mesh_indices)))
 # import torch
 # input = torch.arange(mesh_indices.shape[0]).unsqueeze(0).unsqueeze(-1)
 # from torch_scatter import scatter

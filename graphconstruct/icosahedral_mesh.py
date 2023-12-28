@@ -2,7 +2,7 @@ import numpy as np
 import itertools
 from scipy.spatial import transform
 from typing import NamedTuple
-from utils import *
+from .utils import *
 
 
 class TriangularMesh(NamedTuple):

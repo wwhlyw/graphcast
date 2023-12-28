@@ -1,7 +1,7 @@
 model:
-  splits: 0
+  splits: 7
   processing_steps: 16
-  latent_dims: 512
+  latent_dims: 128
   vm_in_channels: 3
   em_in_channels: 4
   eg2m_in_channels: 4
@@ -9,7 +9,9 @@ model:
   variables: 24
   forcings: 2
   constant: 3
-  radius: 2
+  radius: 0.002
+  scale: 5.5
+  save_path: /home/wwh/graphcast/checkpoints/
 data:
   lon_path: /home/wwh/graphcast/location/lons.npy
   lat_path: /home/wwh/graphcast/location/lats.npy
@@ -25,7 +27,7 @@ data:
   wj: /home/wwh/graphcast/location/wj.npy
   ai: /home/wwh/graphcast/location/ai.npy
 train:
-  phase1_epoch: 100
-  phase2_epoch: 300
-  phase3_epoch: 500
-  reset_steps: 10
+  phase1_epoch: 5
+  phase2_epoch: 10
+  phase3_epoch: 20
+  reset_steps: 1

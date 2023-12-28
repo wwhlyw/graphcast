@@ -57,7 +57,13 @@ class InteractionLayer(nn.Module):
         update_edge_feats = self.edge_fn(torch.concat((src_feats, dst_feats, edge_feats), axis=-1))
         
         sum_edge_feats = scatter(edge_feats, self.dst_idx, dim=1, reduce='sum')
-    
+
+        B, N, L = sum_edge_feats.shape
+        _, N1, _ = dst_node_feats.shape
+        if  N < N1:
+            pad = torch.zeros((B, N1-N, L)).float().to(sum_edge_feats.device)
+            sum_edge_feats = torch.cat((sum_edge_feats, pad), axis=1)
+
         update_dst_feats = self.node_fn(torch.concat((dst_node_feats, sum_edge_feats), axis=-1))
  
         return (update_dst_feats + dst_node_feats, update_edge_feats + edge_feats)

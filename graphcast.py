@@ -32,7 +32,8 @@ class GraphCast:
         # self.ai = np.load(self.data_config['ai'])
 
         # meshes list initialization
-        self._meshes = (icosahedral_mesh.meshes_list(splits=self.model_config['splits']))
+        init_mesh = icosahedral_mesh.get_pentagon(self.model_config['scale'])
+        self._meshes = (icosahedral_mesh.meshes_list(splits=self.model_config['splits'], current_mesh=init_mesh))
         
         self._init_properties(self.raw_grid_lat, self.raw_grid_lon)
 
@@ -71,6 +72,8 @@ class GraphCast:
                 output_timestamps += 1 
             if output_timestamps > self.model_config['output_timestamps']:
                 output_timestamps = self.model_config['output_timestamps']
+                path = f'{self.model_config["save_path"]}/{epoch}.pth'
+                torch.save(self.model.state_dict(), path)
             
 
     def train_one_epoch_1or2_phase(self, train_loader, epoch): 
@@ -101,6 +104,9 @@ class GraphCast:
             if (i+1) % 100 == 0:
                 print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item()}')
             loss.backward()
+
+            max_norm = 32
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
             self.optimizer.step()
 
         return torch.mean(torch.tensor(train_loss))
@@ -133,6 +139,8 @@ class GraphCast:
             if i % 100 == 0:
                 print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item() / input.shape[1]}')
             loss.backward()
+            max_norm = 32
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
             self.optimizer.step()
 
         return torch.mean(torch.tensor(train_loss)) 
@@ -336,6 +344,7 @@ class GraphCast:
             return LambdaLR(self.optimizer, lr_lambda=lr_lambda2)
         else:
             return LambdaLR(self.optimizer, lr_lambda=lambda epoch: 1)
+    
 
     @property
     def _finest_mesh(self):
