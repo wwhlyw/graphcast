@@ -8,9 +8,9 @@ class MLPNet(nn.Module):
     def __init__(self, in_channels, out_channels, latent_dims, has_layernorm=True):
         super().__init__()
         cell_list = [
-            nn.Linear(in_channels, latent_dims, bias=False),
+            nn.Linear(in_channels, latent_dims, bias=False, dtype=torch.float32),
             nn.SiLU(),
-            nn.Linear(latent_dims, out_channels, bias=False),
+            nn.Linear(latent_dims, out_channels, bias=False, dtype=torch.float32),
         ]
         if has_layernorm:
             cell_list.append(nn.LayerNorm([out_channels]))
@@ -31,6 +31,8 @@ class InteractionLayer(nn.Module):
             src_idx,
             dst_idx,
             is_homo,
+            clip_edge_idx=None,
+            mesh_connects=None,
         ):
         super().__init__()
 
@@ -43,10 +45,17 @@ class InteractionLayer(nn.Module):
         self.src_idx = src_idx
         self.dst_idx = dst_idx
         self.is_homo = is_homo
+        self.clip_edge_idx = clip_edge_idx
+        self.mesh_connects = mesh_connects
     
     def forward(self, feats):
         if self.is_homo:
             src_node_feats, dst_node_feats, edge_feats = feats[0], feats[0], feats[1]
+            raw_edge_feats = edge_feats
+            raw_node_feats = dst_node_feats
+            src_node_feats = torch.index_select(src_node_feats, dim=1, index=self.mesh_connects)
+            dst_node_feats = torch.index_select(dst_node_feats, dim=1, index=self.mesh_connects)
+            edge_feats = torch.index_select(edge_feats, dim=1, index=self.clip_edge_idx)
         else:
             src_node_feats, dst_node_feats, edge_feats = feats[0], feats[1], feats[2]
 
@@ -57,7 +66,7 @@ class InteractionLayer(nn.Module):
         update_edge_feats = self.edge_fn(torch.concat((src_feats, dst_feats, edge_feats), axis=-1))
         
         sum_edge_feats = scatter(edge_feats, self.dst_idx, dim=1, reduce='sum')
-
+  
         B, N, L = sum_edge_feats.shape
         _, N1, _ = dst_node_feats.shape
         if  N < N1:
@@ -65,6 +74,15 @@ class InteractionLayer(nn.Module):
             sum_edge_feats = torch.cat((sum_edge_feats, pad), axis=1)
 
         update_dst_feats = self.node_fn(torch.concat((dst_node_feats, sum_edge_feats), axis=-1))
+
+        if self.is_homo:
+            tmp = raw_node_feats
+            tmp[:, self.mesh_connects] = update_dst_feats[:, ]
+            update_dst_feats = tmp
+            dst_node_feats = raw_node_feats
+            edge_feats = raw_edge_feats
+            raw_edge_feats[:, self.clip_edge_idx] = update_edge_feats
+            update_edge_feats = raw_edge_feats
  
         return (update_dst_feats + dst_node_feats, update_edge_feats + edge_feats)
      
@@ -190,6 +208,8 @@ class Processor(nn.Module):
         latent_dims,
         src_idx,
         dst_idx,
+        clip_edge_idx,
+        mesh_connects,
     ):
         super().__init__()
         self.processing_steps = processing_steps
@@ -203,7 +223,9 @@ class Processor(nn.Module):
                 latent_dims,
                 src_idx,
                 dst_idx,
-                is_homo=True
+                is_homo=True,
+                clip_edge_idx=clip_edge_idx,
+                mesh_connects=mesh_connects,
             ))
 
     def forward(self, node_feats, edge_feats):

@@ -7,7 +7,9 @@ from scipy.spatial import transform
 from torch_scatter import scatter
 
 
-x = torch.tensor([5, 1, 7, 2, 3, 2, 1, 3])
-index = torch.tensor([1, 1, 1, 1, 2, 2, 3, 3])
-x = scatter(x, index)
+x = torch.arange(48).reshape(2, 3, 8)
+y = torch.arange(2, 34).reshape(2, 2, 8)
+print(y)
+indices = torch.tensor([0, 2])
+x[:, indices] = y
 print(x)

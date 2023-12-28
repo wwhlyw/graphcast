@@ -9,25 +9,23 @@ from torch.utils.data import DataLoader
 
 
 class Loss(nn.Module):
-    def __init__(self, sj, wj, ai=None):
+    def __init__(self, sj, wj, steps, ai=None):
         super().__init__()
-        self.sj = sj
-        self.wj = wj
+        len_features = len(sj)
+        self.sj = torch.reshape(sj, [1, 1, len_features]).repeat([1, 1, steps])
+        self.wj = torch.reshape(wj, [1, 1, len_features]).repeat([1, 1, steps])
         self.ai = ai
+
 
     def forward(self, predict, target, T=1):
         # predict:[batch, location, feature]
         # sj:[feature]
         # wj:[feature]
         # ai:[location]
-        len_features = len(self.sj)
+
         # len_locations = len(self.ai)
         B, L, F = predict.shape
-        if self.sj.dim == 1:
-            self.sj = torch.reshape(self.sj, [1, 1, len_features]).expand([B, L, -1])
-            self.wj = torch.reshape(self.wj, [1, 1, len_features]).expand([B, L, -1])
         # self.ai = torch.reshape(self.ai, [1, len_locations, 1]).expand([B, -1, F])
-
         # loss = self.sj * self.wj * self.ai * torch.pow((predict - target), 2)
         loss = self.sj * self.wj * torch.pow((predict - target), 2)
       

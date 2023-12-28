@@ -12,6 +12,7 @@ model:
   radius: 0.002
   scale: 5.5
   save_path: /home/wwh/graphcast/checkpoints/
+  output_timestamps: 12
 data:
   lon_path: /home/wwh/graphcast/location/lons.npy
   lat_path: /home/wwh/graphcast/location/lats.npy
@@ -27,7 +28,7 @@ data:
   wj: /home/wwh/graphcast/location/wj.npy
   ai: /home/wwh/graphcast/location/ai.npy
 train:
-  phase1_epoch: 5
-  phase2_epoch: 10
-  phase3_epoch: 20
+  phase1_epoch: 1
+  phase2_epoch: 2
+  phase3_epoch: 5
   reset_steps: 1

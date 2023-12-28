@@ -51,7 +51,8 @@ class GraphCast:
             print(f'epoch: {train_loss}') 
             self.valid()         
         
-        scheduler = self._get_criterion(2)    
+        print('--------------train phase2--------------')
+        scheduler = self._get_scheduler(2)    
         for epoch in range(self.train_config['phase1_epoch'], self.train_config['phase2_epoch']):
             train_loader = self._init_data(mode='train')
             train_loss = self.train_one_epoch_1or2_phase(train_loader, epoch)
@@ -59,10 +60,11 @@ class GraphCast:
             print(f'epoch: {train_loss}')
             self.valid()
         
+        print('--------------train phase3--------------')
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=3e-7, betas=[0.9, 0.95], weight_decay=0.1)
-        scheduler = self._get_criterion(3)
+        scheduler = self._get_scheduler(3)
         output_timestamps = 2
-        reset_steps = self.model_config['reset_steps']
+        reset_steps = self.train_config['reset_steps']
         for epoch in range(self.train_config['phase2_epoch'], self.train_config['phase3_epoch']):
             train_loader = self._init_data(mode='train', output_timestamps=output_timestamps)
             train_loss = self.train_one_epoch_3_phase(train_loader, output_timestamps, epoch)
@@ -108,73 +110,96 @@ class GraphCast:
             max_norm = 32
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
             self.optimizer.step()
+            break
 
         return torch.mean(torch.tensor(train_loss))
 
     def train_one_epoch_3_phase(self, train_loader, steps, epoch):
         train_loss = []
-        
+        vars = self.model_config['variables']
+        self.criterion = self._get_criterion(steps)
         for i, (input, label, input_forcings, label_forcings) in enumerate(train_loader):
             self.optimizer.zero_grad()
             input = input.to(self.device)
             label = label.to(self.device)
+            label_forcings = label_forcings.to(self.device)
             predicts = []
             for j in range(steps):
-                input_forcings_new1 = torch.unsqueeze(input_forcings, dim=1).expand([-1, input.shape[1], -1]).to(self.device)
-                input_forcings_new2 = torch.unsqueeze(label_forcings[:, 2*j:2*(j+1)], dim=1).expand([-1, input.shape[1], -1]).to(self.device)
-                input_forcings_new = torch.cat([input_forcings_new1, input_forcings_new2], dim=-1)
+                input_forcings_new1 = input_forcings.to(self.device)
+                input_forcings_new2 = label_forcings[:, 2*j:2*(j+1)].to(self.device)
+                input_forcings = torch.cat([input_forcings_new1, input_forcings_new2], dim=-1).to(self.device)
+                input_forcings_new = torch.unsqueeze(input_forcings, dim=1).expand([-1, input.shape[1], -1])
                 constant = torch.stack([np.cos(self.grid_lat), 
                                         np.cos(self.grid_lon),
                                         np.sin(self.grid_lon)], dim=1).unsqueeze(dim=0).expand([input.shape[0], -1, -1]).to(self.device)
-                input = torch.concat([input, input_forcings_new, constant], axis=-1).to(self.device)
+              
+                input = torch.concat([input, input_forcings_new, constant], axis=-1).to(self.device).float()
+            
                 predict = self.model(input)
                 
                 predicts.append(predict)
 
                 input = torch.cat([input[:,:, vars:2*vars], predict], axis=-1)
-                input_forcings = torch.cat([input_forcings[:, 2:], label_forcings[:, 2*j:2*(j+1)]], axis=-1)
-            predict_all = torch.cat(predict, axis=-1)
+                input_forcings = input_forcings[:, 2:]
+            
+            predict_all = torch.cat(predicts, axis=-1)
+            # label = label * self.per_variable_level_std + self.per_variable_level_mean
+
             loss = self.criterion(predict_all, label, steps)
             train_loss.append(loss.item())
+
             if i % 100 == 0:
                 print(f'\t epoch: {epoch}|iter: {i}: train_loss: {loss.item() / input.shape[1]}')
             loss.backward()
             max_norm = 32
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm)
             self.optimizer.step()
+            break
 
         return torch.mean(torch.tensor(train_loss)) 
 
     def valid(self, out_timestamps=1):
-        valid_loader = self._init_data('valid')
+        valid_loader = self._init_data('valid', output_timestamps=out_timestamps)
+        vars = self.model_config['variables']
         self.model.eval()
         predict_all = []
         target_all = []
         with torch.no_grad():
             for i, (input, label, input_forcings, label_forcings) in enumerate(valid_loader):
+                input = input.to(self.device)
+                label = label.to(self.device)
+                label_forcings = label_forcings.to(self.device)
                 predicts = []
                 for j in range(out_timestamps):
-                    input_forcings_new1 = torch.unsqueeze(input_forcings, dim=1).expand([-1, input.shape[1], -1]).to(self.device)
-                    input_forcings_new2 = torch.unsqueeze(label_forcings[:, 2*j:2*(j+1)], dim=1).expand([-1, input.shape[1], -1]).to(self.device)
-                    input_forcings_new = torch.cat([input_forcings_new1, input_forcings_new2], dim=-1)
+                    input_forcings_new1 = input_forcings.to(self.device)
+                    input_forcings_new2 = label_forcings[:, 2*j:2*(j+1)].to(self.device)
+                   
+                    input_forcings = torch.cat([input_forcings_new1, input_forcings_new2], dim=-1).to(self.device)
+                    input_forcings_new = torch.unsqueeze(input_forcings, dim=1).expand([-1, input.shape[1], -1])
                     
                     constant = torch.stack([np.cos(self.grid_lat), 
                                             np.cos(self.grid_lon),
-                                            np.sin(self.grid_lon)], dim=1).unsqueeze(dim=0).expand([input.shape[0], -1, -1])
-                    input = torch.concat([input, input_forcings_new, constant], axis=-1)
+                                            np.sin(self.grid_lon)], dim=1).unsqueeze(dim=0).expand([input.shape[0], -1, -1]).to(self.device)
+                    
+                    print('input_forcings_new', input_forcings_new.shape)
+                    input = torch.concat([input, input_forcings_new, constant], axis=-1).float()
+                
                     predict = self.model(input)
                     
                     predicts.append(predict)
 
-                    input = torch.cat([input[:,:, vars:2*vars], predict], axis=-1)
-                    input_forcings = torch.cat([input_forcings[:, 2:], label_forcings[:, 2*j:2*(j+1)]], axis=-1)
+                    input = torch.cat([input[:, :, vars:2*vars], predict], axis=-1)
+                    input_forcings = input_forcings[:, 2:]
+                
                 # [B, N, F * T]
-                tmp = torch.cat(predict, axis=-1)
+                tmp = torch.cat(predicts, axis=-1)
                 predict_all.append(tmp)
                 target_all.append(label)
+                break
             # [B, N, F * T] -> [F * T, B, N]
-            predict_all = torch.cat(predict_all, dim=0).transpose([2, 0, 1])
-            target_all = torch.cat(target_all, dim=0).transpose([2, 0, 1])
+
+            predict_all = torch.cat(predict_all, dim=0).permute(2, 0, 1)
+            target_all = torch.cat(target_all, dim=0).permute(2, 0, 1)
             RMSE = torch.sqrt(torch.mean((predict_all[:,...]-target_all[:,...]) ** 2))
             print(f'VALID RMSE: {RMSE}')
 
@@ -248,10 +273,22 @@ class GraphCast:
             senders = senders,
             receivers = receivers,
         )
-
+        clip_senders = []
+        clip_receivers = []
+        clip_edge_index = []
+        mesh_connects = set(self.g2m_dst_idx.tolist())
+        raw2clip = {mesh_idx:i for i, mesh_idx in enumerate(mesh_connects)} 
+        for i, (sender, receiver) in enumerate(zip(senders, receivers)):
+            if sender in mesh_connects and receiver in mesh_connects:
+                clip_senders.append(raw2clip[sender])
+                clip_receivers.append(raw2clip[receiver])
+                clip_edge_index.append(i)
+        
+        self.mesh_connects = torch.tensor(list(mesh_connects), dtype=torch.int64).to(self.device)
+        self.clip_edge_index = torch.tensor(clip_edge_index, dtype=torch.int64).to(self.device)
         self.mesh_edge_feats = torch.tensor(edge_features, dtype=torch.float32).to(self.device)
-        self.m2m_src_idx = torch.tensor(senders, dtype=torch.int64).to(self.device)
-        self.m2m_dst_idx = torch.tensor(receivers, dtype=torch.int64).to(self.device)
+        self.m2m_src_idx = torch.tensor(clip_senders, dtype=torch.int64).to(self.device)
+        self.m2m_dst_idx = torch.tensor(clip_receivers, dtype=torch.int64).to(self.device)
 
     def _init_mesh2grid_graph(self):
         grid_indices, mesh_indices = grid_mesh_connectivity.mesh2grid_edge_indices(
@@ -306,6 +343,8 @@ class GraphCast:
             mesh_edge_feats=self.mesh_edge_feats,
             g2m_edge_feats=self.g2m_edge_feats,
             m2g_edge_feats=self.m2g_edge_feats,
+            clip_edge_idx=self.clip_edge_index,
+            mesh_connects=self.mesh_connects,
             per_variable_level_mean=self.per_variable_level_mean,
             per_variable_level_std=self.per_variable_level_std
         ).to(self.device)
@@ -320,8 +359,8 @@ class GraphCast:
             data_loader = DataLoader(hrrr_data, batch_size=self.data_config['batch_size'])
         return data_loader
 
-    def _get_criterion(self):
-        criterion = Loss(self.sj, self.wj)
+    def _get_criterion(self, steps=1):
+        criterion = Loss(self.sj, self.wj, steps)
         return criterion 
 
     def _get_optimizer(self):
@@ -339,7 +378,7 @@ class GraphCast:
             def lr_lambda2(epoch):
                 initial_lr = 0.001
                 final_lr = 0
-                total_steps = self.train_config['phase2_epoch'] - self.train_config['phase2_epoch']
+                total_steps = self.train_config['phase2_epoch'] - self.train_config['phase1_epoch']
                 return final_lr + 0.5 * (initial_lr - final_lr) * (1 + math.cos(math.pi * epoch / total_steps))
             return LambdaLR(self.optimizer, lr_lambda=lr_lambda2)
         else:

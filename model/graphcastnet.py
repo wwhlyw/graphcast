@@ -23,6 +23,8 @@ class GraphCastNet(nn.Module):
         mesh_edge_feats,
         g2m_edge_feats,
         m2g_edge_feats,
+        clip_edge_idx,
+        mesh_connects,
         per_variable_level_mean,
         per_variable_level_std,
     ):
@@ -52,7 +54,9 @@ class GraphCastNet(nn.Module):
             processing_steps=processing_steps,
             latent_dims=latent_dims,
             src_idx=m2m_src_idx,
-            dst_idx=m2m_dst_idx
+            dst_idx=m2m_dst_idx,
+            clip_edge_idx=clip_edge_idx,
+            mesh_connects=mesh_connects
         )
         self.decoder = Decoder(
             node_in_channels=latent_dims,
