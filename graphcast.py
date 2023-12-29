@@ -9,6 +9,7 @@ import torch
 from torch.optim.lr_scheduler import LambdaLR
 import math
 import torch.nn as nn
+import os
 
 
 class GraphCast:
@@ -22,6 +23,9 @@ class GraphCast:
         self.lat_path = self.data_config['lat_path']
 
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.variables_list = ["z50", "z500", "z850", "z1000", "t50", "t500", "t850", "t1000", 
+                               "s50", "s500", "s850", "s1000", "u50", "u500", "u850", "u1000", 
+                               "v50", "v500", "v850", "v1000", "mslp", "u10", "v10", "t2m",]
 
         self.raw_grid_lat = np.load(self.lat_path)[253:693,970:1378]
         self.raw_grid_lon = np.load(self.lon_path)[253:693,970:1378] 
@@ -44,11 +48,13 @@ class GraphCast:
         print('-------------start training-------------')
         print('--------------train phase1--------------')
         scheduler = self._get_scheduler(1)
+        self.idx = 1
         for epoch in range(self.train_config['phase1_epoch']):
             train_loader = self._init_data(mode='train')
             train_loss = self.train_one_epoch_1or2_phase(train_loader, epoch)
             scheduler.step()
-            print(f'epoch: {train_loss}') 
+            print(f'epoch: {train_loss}')
+            self.write_to_file(folder_path='/home/wwh/graphcast/train', file_name='train.txt', content=f'epoch:{train_loss}\n') 
             self.valid()         
         
         print('--------------train phase2--------------')
@@ -58,6 +64,7 @@ class GraphCast:
             train_loss = self.train_one_epoch_1or2_phase(train_loader, epoch)
             scheduler.step()
             print(f'epoch: {train_loss}')
+            self.write_to_file(folder_path='/home/wwh/graphcast/train', file_name='train.txt', content=f'epoch:{train_loss}\n') 
             self.valid()
         
         print('--------------train phase3--------------')
@@ -69,7 +76,7 @@ class GraphCast:
             train_loader = self._init_data(mode='train', output_timestamps=output_timestamps)
             train_loss = self.train_one_epoch_3_phase(train_loader, output_timestamps, epoch)
             print(f'epoch: {train_loss}')
-            self.valid(out_timestamps=output_timestamps) 
+            self.valid(steps=output_timestamps) 
             if epoch % reset_steps == 0:
                 output_timestamps += 1 
             if output_timestamps > self.model_config['output_timestamps']:
@@ -143,7 +150,10 @@ class GraphCast:
                 input_forcings = input_forcings[:, 2:]
             
             predict_all = torch.cat(predicts, axis=-1)
-            # label = label * self.per_variable_level_std + self.per_variable_level_mean
+
+            per_variable_level_mean = self.per_variable_level_mean.unsqueeze(0).unsqueeze(0).repeat([1, 1, steps])
+            per_variable_level_std = self.per_variable_level_std.unsqueeze(0).unsqueeze(0).repeat([1, 1, steps])
+            label = label * per_variable_level_std + per_variable_level_mean
 
             loss = self.criterion(predict_all, label, steps)
             train_loss.append(loss.item())
@@ -158,8 +168,8 @@ class GraphCast:
 
         return torch.mean(torch.tensor(train_loss)) 
 
-    def valid(self, out_timestamps=1):
-        valid_loader = self._init_data('valid', output_timestamps=out_timestamps)
+    def valid(self, steps=1):
+        valid_loader = self._init_data('valid', output_timestamps=steps)
         vars = self.model_config['variables']
         self.model.eval()
         predict_all = []
@@ -170,7 +180,7 @@ class GraphCast:
                 label = label.to(self.device)
                 label_forcings = label_forcings.to(self.device)
                 predicts = []
-                for j in range(out_timestamps):
+                for j in range(steps):
                     input_forcings_new1 = input_forcings.to(self.device)
                     input_forcings_new2 = label_forcings[:, 2*j:2*(j+1)].to(self.device)
                    
@@ -181,7 +191,7 @@ class GraphCast:
                                             np.cos(self.grid_lon),
                                             np.sin(self.grid_lon)], dim=1).unsqueeze(dim=0).expand([input.shape[0], -1, -1]).to(self.device)
                     
-                    print('input_forcings_new', input_forcings_new.shape)
+                
                     input = torch.concat([input, input_forcings_new, constant], axis=-1).float()
                 
                     predict = self.model(input)
@@ -191,6 +201,9 @@ class GraphCast:
                     input = torch.cat([input[:, :, vars:2*vars], predict], axis=-1)
                     input_forcings = input_forcings[:, 2:]
                 
+                per_variable_level_mean = self.per_variable_level_mean.unsqueeze(0).unsqueeze(0).repeat([1, 1, steps])
+                per_variable_level_std = self.per_variable_level_std.unsqueeze(0).unsqueeze(0).repeat([1, 1, steps])
+                label = label * per_variable_level_std + per_variable_level_mean
                 # [B, N, F * T]
                 tmp = torch.cat(predicts, axis=-1)
                 predict_all.append(tmp)
@@ -200,7 +213,18 @@ class GraphCast:
 
             predict_all = torch.cat(predict_all, dim=0).permute(2, 0, 1)
             target_all = torch.cat(target_all, dim=0).permute(2, 0, 1)
-            RMSE = torch.sqrt(torch.mean((predict_all[:,...]-target_all[:,...]) ** 2))
+            for i in range(steps):
+                for j, variable in enumerate(self.variables_list):
+                    folder_path = '/home/wwh/graphcast/predict/' + str(i)
+                    file_name = variable + '.txt'
+                    RMSE = torch.sqrt(torch.mean((predict_all[i*24+j] - target_all[i*24+j]) ** 2))
+                    content = f'rmse:{RMSE}\n'
+                    self.write_to_file(folder_path, file_name, content)
+            RMSE = torch.sqrt(torch.mean((predict_all-target_all) ** 2))
+            folder_path = '/home/wwh/graphcast/predict/' + str(i)
+            file_name = 'total.txt'
+            content = f'rmse:{RMSE}\n'
+            self.write_to_file(folder_path, file_name, content)
             print(f'VALID RMSE: {RMSE}')
 
     def _init_properties(self, grid_lat, grid_lon):
@@ -384,6 +408,16 @@ class GraphCast:
         else:
             return LambdaLR(self.optimizer, lr_lambda=lambda epoch: 1)
     
+    def write_to_file(self, folder_path, file_name, content):
+        file_path = os.path.join(folder_path, file_name)
+        try:
+            with open(file_path, 'a') as file:
+                file.write(content)
+        except FileNotFoundError:
+            if not os.path.exists(folder_path): 
+                os.makedirs(folder_path)
+            with open(file_path, 'w') as file:
+                file.write(content)
 
     @property
     def _finest_mesh(self):

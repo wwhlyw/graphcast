@@ -7,9 +7,7 @@ from scipy.spatial import transform
 from torch_scatter import scatter
 
 
-x = torch.arange(48).reshape(2, 3, 8)
-y = torch.arange(2, 34).reshape(2, 2, 8)
-print(y)
-indices = torch.tensor([0, 2])
-x[:, indices] = y
-print(x)
+datas = np.load('./predict.npy')
+for data in datas[0]:
+    if data < 20000:
+        print(data)
