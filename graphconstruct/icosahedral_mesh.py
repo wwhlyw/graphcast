@@ -2,7 +2,7 @@ import numpy as np
 import itertools
 from scipy.spatial import transform
 from typing import NamedTuple
-from .utils import *
+from utils import *
 
 
 class TriangularMesh(NamedTuple):
@@ -65,6 +65,24 @@ def get_pentagon(scale):
 
     return TriangularMesh(vertices=vertices.astype(np.float32), faces=np.array(faces, dtype=np.int32))
 
+def get_quadrangle():
+    high, width = 440., 408.
+    vertices = np.array([[220., 204, 0],
+                         [0, 0, 0],
+                         [0, 408, 0],
+                         [440, 0, 0],
+                         [440, 408, 0]])
+    vertices[:, 0] = vertices[:, 0] / high
+    vertices[:, 1] = vertices[:, 1] / high
+
+    faces = [
+        (0, 1, 2),
+        (0, 2, 4),
+        (0, 3, 4),
+        (0, 3, 1),
+    ]
+
+    return TriangularMesh(vertices=vertices, faces=faces)
 
 def get_icosahedron():
     phi = (1 + np.sqrt(5)) / 2
@@ -138,7 +156,7 @@ class _ChildVerticesBuilder:
     
     def _create_child_vertex(self, parent_vertex_indices):
         child_vertex_position = self._parent_vertices[list(parent_vertex_indices)].mean(0)
-        child_vertex_position /= np.linalg.norm(child_vertex_position)
+        #child_vertex_position /= np.linalg.norm(child_vertex_position)
 
         child_vertex_key = self._get_child_vertex_key(parent_vertex_indices)
         self._child_vertices_index_mapping[child_vertex_key] = len(self._all_vertices_list)
@@ -157,3 +175,7 @@ class _ChildVerticesBuilder:
 # mesh = merge_meshes(meshes_list(1, init_mesh))
 # print(mesh.vertices)
 # print(mesh.faces)
+# mesh = get_quadrangle()
+# meshlist = meshes_list(1, mesh)
+# print(meshlist[1].vertices)
+# print(meshlist[1].faces)

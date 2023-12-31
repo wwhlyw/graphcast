@@ -1,8 +1,8 @@
-from . import icosahedral_mesh
+import icosahedral_mesh
 import numpy as np
 import scipy
 import trimesh
-from .utils import *
+from utils import *
 
 
 def grid2mesh_edges_indices(
@@ -59,9 +59,9 @@ def mesh2grid_edge_indices(
 
     return grid_edge_indices, mesh_edge_indices
 
+
 def mesh2mesh_edge_indices(
     faces,
-    g2m_dst_idx=None
 ):
     senders = np.concatenate([faces[:, 0], faces[:, 1], faces[:, 2]])
     receivers = np.concatenate([faces[:, 1], faces[:, 2], faces[:, 0]])  
@@ -84,5 +84,28 @@ def mesh2mesh_edge_indices(
 # from torch_scatter import scatter
 # output = scatter(input, torch.from_numpy(mesh_indices), dim=1)
 # print(output)
+def g2m_or_m2g_edges_indices_2d(mesh, radius, type):
+    senders = []
+    receivers = []
+    for x in range(408):
+        gx = x / 440.
+        for y in range(440):
+            gy = y / 408.
+            for k, (mx, my, _) in enumerate(mesh.vertices):
+                r = np.sqrt((gx-mx) ** 2 + (gy-my) ** 2)
+                if r < radius:
+                    senders.append(y * 408 + x)
+                    receivers.append(k)
+
+    
+    if type == 'g2m':
+        return senders, receivers
+    else:
+        return receivers, senders
+
+def mesh2grid_edges_indices_2d(mesh, radius):
 
 
+
+
+grid2mesh_edges_indices_2d(1, 1)
