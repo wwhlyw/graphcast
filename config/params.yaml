@@ -28,7 +28,7 @@ data:
   wj: /home/wwh/graphcast/location/wj.npy
   ai: /home/wwh/graphcast/location/ai.npy
 train:
-  phase1_epoch: 1
-  phase2_epoch: 2
+  phase1_epoch: 0
+  phase2_epoch: 200
   phase3_epoch: 2
   reset_steps: 1

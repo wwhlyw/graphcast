@@ -165,3 +165,64 @@ def get_homogeneous_relative_position_in_receiver_local_coordinates(
     )
 
     return sender_pos_in_rotated_space - receiver_pos_in_rotated_space
+
+def get_bipartite_graph_spatial_features_2d(
+    *,
+    senders_pos,
+    receivers_pos,
+    senders,
+    receivers,
+):
+    # senders_pos:[senders_num, 2]
+    edge_features = []
+    relative_features = []
+    senders = senders_pos[senders]
+    receivers = receivers_pos[receivers]
+    
+    for i in range(len(senders)):
+        edge_feature = senders[i] - receivers[i]
+        relative_features.append(edge_feature)
+    edge_distances = np.linalg.norm(relative_features, axis=-1, keepdims=True)
+    edge_normlization_factor = edge_distances.max()
+    edge_features.append(relative_features / edge_normlization_factor)
+    edge_features.append(edge_distances / edge_normlization_factor)
+    edge_features = np.concatenate(edge_features, axis=-1)
+
+    return senders, receivers, edge_features
+
+
+def get_homogeneous_graph_spatial_features_2d(
+    *,
+    meshes_pos,
+    senders,
+    receivers,
+):
+    senders_pos = meshes_pos[senders]
+    receivers_pos = meshes_pos[receivers]
+    relative_features = []
+    edge_features = []
+    for i in range(len(senders_pos)):
+        edge_feature = senders_pos[i] - receivers_pos[i]
+        relative_features.append(edge_feature)
+    edge_distances = np.linalg.norm(relative_features, axis=-1, keepdims=True)
+    edge_normlization_factor = edge_distances.max()
+    edge_features.append(relative_features / edge_normlization_factor)
+    edge_features.append(edge_distances / edge_normlization_factor)
+    edge_features = np.concatenate(edge_features, axis=-1)
+    print(edge_features.shape)
+    return edge_features
+    
+
+senders_pos = []
+for i in range(408):
+    for j in range(440):
+        senders_pos.append([i / 440., j / 440.])
+
+# senders_pos = np.array(senders_pos)
+# import icosahedral_mesh
+# import grid_mesh_connectivity
+# meshes = icosahedral_mesh.merge_meshes(icosahedral_mesh.meshes_list(1, icosahedral_mesh.get_quadrangle()))
+# senders, receivers = grid_mesh_connectivity.g2m_or_m2g_edges_indices_2d(meshes, 0.18, 'g2m')
+# get_bipartite_graph_spatial_features_2d(senders_pos=senders_pos, receivers_pos=meshes.vertices[:, :2], senders=senders, receivers=receivers)
+# senders, receivers = grid_mesh_connectivity.mesh2mesh_edges_indices_2d(meshes.faces)
+# get_homogeneous_graph_spatial_features_2d(meshes_pos=meshes.vertices[:, :2], senders=senders, receivers=receivers)

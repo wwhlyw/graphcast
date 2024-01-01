@@ -156,7 +156,7 @@ class _ChildVerticesBuilder:
     
     def _create_child_vertex(self, parent_vertex_indices):
         child_vertex_position = self._parent_vertices[list(parent_vertex_indices)].mean(0)
-        #child_vertex_position /= np.linalg.norm(child_vertex_position)
+        # child_vertex_position /= np.linalg.norm(child_vertex_position)
 
         child_vertex_key = self._get_child_vertex_key(parent_vertex_indices)
         self._child_vertices_index_mapping[child_vertex_key] = len(self._all_vertices_list)

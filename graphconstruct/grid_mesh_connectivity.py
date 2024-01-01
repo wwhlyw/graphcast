@@ -96,16 +96,41 @@ def g2m_or_m2g_edges_indices_2d(mesh, radius, type):
                 if r < radius:
                     senders.append(y * 408 + x)
                     receivers.append(k)
-
     
     if type == 'g2m':
         return senders, receivers
     else:
         return receivers, senders
 
-def mesh2grid_edges_indices_2d(mesh, radius):
+def mesh2mesh_edges_indices_2d(faces):
+    senders = np.concatenate([faces[:, 0], faces[:, 1], faces[:, 2]])
+    receivers = np.concatenate([faces[:, 1], faces[:, 2], faces[:, 0]])
+
+    arrs = []
+    for arr in zip(senders, receivers):
+        arr = list(arr)
+        if arr[0] > arr[1]:
+            arr[0], arr[1] = arr[1], arr[0]
+        arrs.append(arr) 
+
+    unique = []
+    for arr in arrs:
+        if arr not in unique:
+            unique.append(arr)
+    
+    senders = []
+    receivers = []
+
+    for arr in unique:
+        senders.append(arr[0])
+        receivers.append(arr[1])
+        senders.append(arr[1])
+        receivers.append(arr[0])
+    return np.array(senders), np.array(receivers)
 
 
-
-
-grid2mesh_edges_indices_2d(1, 1)
+# mesh = icosahedral_mesh.get_quadrangle()
+# meshes = icosahedral_mesh.meshes_list(1, mesh)
+# meshes = icosahedral_mesh.merge_meshes(meshes)
+# faces = meshes.faces
+# g2m_or_m2g_edges_indices_2d(meshes, 0.18, 'g2m')

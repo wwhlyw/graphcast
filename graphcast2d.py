@@ -18,17 +18,10 @@ class GraphCast:
         self.data_config = config['data']
         self.train_config = config['train']
 
-        # data path
-        self.lon_path = self.data_config['lon_path']
-        self.lat_path = self.data_config['lat_path']
-
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.variables_list = ["z50", "z500", "z850", "z1000", "t50", "t500", "t850", "t1000", 
                                "s50", "s500", "s850", "s1000", "u50", "u500", "u850", "u1000", 
-                               "v50", "v500", "v850", "v1000", "mslp", "u10", "v10", "t2m",]
-
-        self.raw_grid_lat = np.load(self.lat_path)[253:693,970:1378]
-        self.raw_grid_lon = np.load(self.lon_path)[253:693,970:1378] 
+                               "v50", "v500", "v850", "v1000", "mslp", "u10", "v10", "t2m",] 
 
         # sj, wj, ai
         self.sj = torch.from_numpy(np.load(self.data_config['sj'])).to(self.device)
@@ -36,10 +29,10 @@ class GraphCast:
         # self.ai = np.load(self.data_config['ai'])
 
         # meshes list initialization
-        init_mesh = icosahedral_mesh.get_pentagon(self.model_config['scale'])
+        init_mesh = icosahedral_mesh.get_quadrangle()
         self._meshes = (icosahedral_mesh.meshes_list(splits=self.model_config['splits'], current_mesh=init_mesh))
         
-        self._init_properties(self.raw_grid_lat, self.raw_grid_lon)
+        self._init_properties()
 
     def train(self):
         self.optimizer = self._get_optimizer()
@@ -225,9 +218,9 @@ class GraphCast:
             self.write_to_file(folder_path, file_name, content)
             print(f'VALID RMSE: {RMSE}')
 
-    def _init_properties(self, grid_lat, grid_lon):
+    def _init_properties(self):
         self._init_mesh_properties()
-        self._init_grid_properties(grid_lat, grid_lon)
+        self._init_grid_properties()
         self._init_grid2mesh_graph()
         self._init_mesh2mesh_graph()
         self._init_mesh2grid_graph()
@@ -236,48 +229,41 @@ class GraphCast:
 
 
     def _init_mesh_properties(self):
-        self._num_mesh_nodes = self._finest_mesh.vertices.shape[0]
-        mesh_phi, mesh_theta = features.cartesian_to_spherical(
-            self._finest_mesh.vertices[:, 0],
-            self._finest_mesh.vertices[:, 1],
-            self._finest_mesh.vertices[:, 2],
-        )
-        mesh_lat, mesh_lon = features.spherical_to_lat_lon(
-            phi=mesh_phi, theta=mesh_theta
-        )
+        self.mesh_pos = self._finest_mesh.vertices[:, :2]
 
-        self.mesh_lat = torch.tensor(mesh_lat, dtype=torch.float32)
-        self.mesh_lon = torch.tensor(mesh_lon, dtype=torch.float32)
     
-    def _init_grid_properties(self, grid_lat, grid_lon):
+    def _init_grid_properties(self):
         """
         input:
         grid_lat: [num_lat, num_lon] latitude of grid nodes
         grid_lon: [num_lat, num_lon] longitude of grid nodes     
         """
-        self._num_grid_nodes = grid_lat.shape[0] * grid_lat.shape[1]
-
-        # self.grid_lon: [num_grid]  self.grid_lat: [num_grid]   
-        self.grid_lon = torch.tensor(grid_lon.reshape([-1]), dtype=torch.float32)
-        self.grid_lat = torch.tensor(grid_lat.reshape([-1]), dtype=torch.float32)
+        grid_y = torch.arange(408).repeat(440) / 440.
+        grid_x = torch.arange(440).reshape([-1, 1]).repeat([-1, 408]).reshape([-1]) / 440.
+        # self.grid_lon: [num_grid]  self.grid_lat: [num_grid]  1维形式 
+        self.grid_x = torch.tensor(grid_x, dtype=torch.float32)
+        self.grid_y = torch.tensor(grid_y, dtype=torch.float32)
+        senders_pos = []
+        for i in range(408):
+            for j in range(440):
+                senders_pos.append([i / 440., j / 440.])
+        # 2维形式
+        self.grid_pos = torch.tensor(senders_pos, dtype=torch.float32)
  
     def _init_grid2mesh_graph(self):
-        self.g2m_src_idx, self.g2m_dst_idx = grid_mesh_connectivity.grid2mesh_edges_indices(
-            grid_latitude=self.raw_grid_lat,
-            grid_longitude=self.raw_grid_lon,
+        self.g2m_src_idx, self.g2m_dst_idx = grid_mesh_connectivity.g2m_or_m2g_edges_indices_2d(
             mesh=self._finest_mesh,
-            radius=self.model_config['radius']
+            radius=self.model_config['radius'],
+            type='g2m'
         )
         
-
-        senders_node_features, receivers_node_features, edge_features = features.get_bipartite_graph_spatial_features(
-            senders_lat = self.grid_lat,
-            senders_lon = self.grid_lon,
-            receivers_lat = self.mesh_lat,
-            receivers_lon = self.mesh_lon,
+        senders_node_features, receivers_node_features, edge_features = features.get_bipartite_graph_spatial_features_2d(
+            senders_pos = self.grid_pos,
+            receivers_pos= self.mesh_pos,
             senders = self.g2m_src_idx,
             receivers = self.g2m_dst_idx,
         )
+
         self.grid_constant_feats = torch.tensor(senders_node_features, dtype=torch.float32).to(self.device)
         self.mesh_node_feats = torch.tensor(receivers_node_features, dtype=torch.float32).to(self.device)
         self.g2m_edge_feats = torch.tensor(edge_features, dtype=torch.float32).to(self.device)
@@ -288,10 +274,10 @@ class GraphCast:
     
     def _init_mesh2mesh_graph(self):
         merged_mesh = icosahedral_mesh.merge_meshes(self._meshes)
-        senders, receivers = grid_mesh_connectivity.mesh2mesh_edge_indices(merged_mesh.faces)
+        senders, receivers = grid_mesh_connectivity.mesh2mesh_edge_indices_2d(merged_mesh.faces)
         edge_features = features.get_homogeneous_graph_spatial_features(
-            node_lat = self.mesh_lat,
-            node_lon = self.mesh_lon,
+            node_lat = self.mesh_pos,
+            node_lon = self.mesh_pos,
             senders = senders,
             receivers = receivers,
         )
@@ -313,23 +299,22 @@ class GraphCast:
         self.m2m_dst_idx = torch.tensor(clip_receivers, dtype=torch.int64).to(self.device)
 
     def _init_mesh2grid_graph(self):
-        grid_indices, mesh_indices = grid_mesh_connectivity.mesh2grid_edge_indices(
-            grid_latitude=self.raw_grid_lat,
-            grid_longitude=self.raw_grid_lon,
+        grid_indices, mesh_indices = grid_mesh_connectivity.g2m_or_m2g_edges_indices_2d(
             mesh=self._finest_mesh,
+            radius=self.model_config['radius'],
+            type='m2g'
         )
 
         senders = mesh_indices,
         receivers = grid_indices,
 
-        _, _, edge_features = features.get_bipartite_graph_spatial_features(
-            senders_lat=self.mesh_lat,
-            senders_lon=self.mesh_lon,
-            receivers_lat=self.grid_lat,
-            receivers_lon=self.grid_lon,
+        _, _, edge_features = features.get_bipartite_graph_spatial_features_2d(
+            senders_pos = self.mesh_pos,
+            receivers_pos= self.grid_pos,
             senders=senders,
             receivers=receivers,
         )
+
         self.m2g_edge_feats = torch.tensor(edge_features, dtype=torch.float32).to(self.device)
         self.m2g_src_idx = torch.tensor(mesh_indices, dtype=torch.int64).to(self.device)
         self.m2g_dst_idx = torch.tensor(grid_indices, dtype=torch.int64).to(self.device)
