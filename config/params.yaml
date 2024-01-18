@@ -23,7 +23,8 @@ data:
   mode: train
   train: /ssd1/hrrr_data/train
   valid: /ssd1/hrrr_data/valid
-  batch_size: 1
+  train_batch_size: 3
+  valid_batch_size: 3
   sj: /home/wwh/graphcast/location/sj.npy
   wj: /home/wwh/graphcast/location/wj.npy
   ai: /home/wwh/graphcast/location/ai.npy

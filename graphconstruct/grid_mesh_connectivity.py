@@ -1,8 +1,10 @@
-import icosahedral_mesh
+from . import icosahedral_mesh
+from .utils import *
 import numpy as np
 import scipy
 import trimesh
-from utils import *
+# import icosahedral_mesh
+# from utils import * 
 
 
 def grid2mesh_edges_indices(
@@ -24,6 +26,7 @@ def grid2mesh_edges_indices(
     mesh_edge_indices = []
     for grid_index, mesh_neighbors in enumerate(query_indices):
         if len(mesh_neighbors) == 0:
+            print(grid_index)
             raise "some grids don't link with mesh"
         grid_edge_indices.append(np.repeat(grid_index, len(mesh_neighbors)))
         mesh_edge_indices.append(mesh_neighbors)
@@ -87,20 +90,52 @@ def mesh2mesh_edge_indices(
 def g2m_or_m2g_edges_indices_2d(mesh, radius, type):
     senders = []
     receivers = []
-    for x in range(408):
-        gx = x / 440.
-        for y in range(440):
-            gy = y / 408.
-            for k, (mx, my, _) in enumerate(mesh.vertices):
-                r = np.sqrt((gx-mx) ** 2 + (gy-my) ** 2)
-                if r < radius:
-                    senders.append(y * 408 + x)
-                    receivers.append(k)
     
-    if type == 'g2m':
-        return senders, receivers
-    else:
-        return receivers, senders
+    grid_y = np.arange(408).repeat(440) / 440.
+    grid_x = np.tile(np.arange(440) / 440., 408)
+    grid = np.concatenate([grid_x, grid_y]).reshape([2, -1]).transpose()
+    
+    kd_tree = scipy.spatial.cKDTree(mesh.vertices[:, :2])
+
+    query_indices = kd_tree.query_ball_point(x=grid, r=radius)
+
+    grid_edge_indices = []
+    mesh_edge_indices = []
+    for grid_index, mesh_neighbors in enumerate(query_indices):
+        if len(mesh_neighbors) == 0:
+            raise "some grids don't link with mesh"
+        grid_edge_indices.append(np.repeat(grid_index, len(mesh_neighbors)))
+        mesh_edge_indices.append(mesh_neighbors)
+
+    grid_edge_indices = np.concatenate(grid_edge_indices, axis=0).astype(int)
+    mesh_edge_indices = np.concatenate(mesh_edge_indices, axis=0).astype(int)
+ 
+    return grid_edge_indices, mesh_edge_indices
+
+def mesh2grid_edge_indices_2d(
+        mesh: icosahedral_mesh.TriangularMesh
+    ) -> tuple[np.ndarray, np.ndarray]:
+    
+    grid_y = np.arange(408).repeat(440) / 440.
+    grid_x = np.tile(np.arange(440) / 440., 408)
+    grid_z = np.zeros(440 * 408, )
+    grid = np.concatenate([grid_x, grid_y, grid_z]).reshape([3, -1]).transpose()
+
+    mesh_trimesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.faces)
+
+    _, _, query_face_indices = trimesh.proximity.closest_point(
+        mesh_trimesh, grid
+    )
+    
+    mesh_edge_indices = mesh.faces[query_face_indices]
+    
+    grid_indices = np.arange(grid.shape[0])
+    grid_edge_indices = np.tile(grid_indices.reshape([-1, 1]), [1, 3])
+
+    mesh_edge_indices = mesh_edge_indices.reshape([-1])
+    grid_edge_indices = grid_edge_indices.reshape([-1])
+
+    return grid_edge_indices, mesh_edge_indices
 
 def mesh2mesh_edges_indices_2d(faces):
     senders = np.concatenate([faces[:, 0], faces[:, 1], faces[:, 2]])
@@ -130,7 +165,10 @@ def mesh2mesh_edges_indices_2d(faces):
 
 
 # mesh = icosahedral_mesh.get_quadrangle()
-# meshes = icosahedral_mesh.meshes_list(1, mesh)
+# meshes = icosahedral_mesh.meshes_list(7, mesh)
 # meshes = icosahedral_mesh.merge_meshes(meshes)
 # faces = meshes.faces
-# g2m_or_m2g_edges_indices_2d(meshes, 0.18, 'g2m')
+# print(len(meshes.vertices))
+# senders, receivers = mesh2grid_edge_indices_2d(meshes)
+# print(senders[:20])
+# print(receivers[:20])

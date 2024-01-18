@@ -53,9 +53,9 @@ class GraphCast:
             train_loader = self._init_data(mode='train')
             train_loss = self.train_one_epoch_1or2_phase(train_loader, epoch)
             scheduler.step()
-            print(f'epoch: {train_loss}')
-            self.write_to_file(folder_path='/home/wwh/graphcast/train', file_name='train.txt', content=f'epoch:{train_loss}\n') 
-            self.valid()         
+            print(f'epoch {epoch}: {train_loss}')
+            self.write_to_file(folder_path='/home/wwh/graphcast/train', file_name='train.txt', content=f'epoch {epoch}:{train_loss}\n') 
+            # self.valid()         
         
         print('--------------train phase2--------------')
         scheduler = self._get_scheduler(2)    
@@ -63,9 +63,12 @@ class GraphCast:
             train_loader = self._init_data(mode='train')
             train_loss = self.train_one_epoch_1or2_phase(train_loader, epoch)
             scheduler.step()
-            print(f'epoch: {train_loss}')
-            self.write_to_file(folder_path='/home/wwh/graphcast/train', file_name='train.txt', content=f'epoch:{train_loss}\n') 
-            self.valid()
+            print(f'epoch {epoch}: {train_loss}')
+            self.write_to_file(folder_path='/home/wwh/graphcast/train', file_name='train.txt', content=f'epoch {epoch}:{train_loss}\n') 
+            # self.valid()
+            if epoch > 100:
+                path = f'{self.model_config["save_path"]}/{epoch}.pth'
+                torch.save(self.model.state_dict(), path)
         
         print('--------------train phase3--------------')
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=3e-7, betas=[0.9, 0.95], weight_decay=0.1)
@@ -190,12 +193,12 @@ class GraphCast:
                                             np.cos(self.grid_lon),
                                             np.sin(self.grid_lon)], dim=1).unsqueeze(dim=0).expand([input.shape[0], -1, -1]).to(self.device)
                     
-                
+                    
                     input = torch.concat([input, input_forcings_new, constant], axis=-1).float()
                 
                     predict = self.model(input)
                     
-                    predicts.append(predict)
+                    predicts.append(predict.cpu())
 
                     input = torch.cat([input[:, :, vars:2*vars], predict], axis=-1)
                     input_forcings = input_forcings[:, 2:]
@@ -206,7 +209,7 @@ class GraphCast:
                 # [B, N, F * T]
                 tmp = torch.cat(predicts, axis=-1)
                 predict_all.append(tmp)
-                target_all.append(label)
+                target_all.append(label.cpu())
             # [B, N, F * T] -> [F * T, B, N]
 
             predict_all = torch.cat(predict_all, dim=0).permute(2, 0, 1)
@@ -337,11 +340,7 @@ class GraphCast:
     def _init_model(self):
         self.per_variable_level_mean = torch.from_numpy(np.load(self.data_config['mean'])).to(self.device)
         self.per_variable_level_std = torch.from_numpy(np.load(self.data_config['std'])).to(self.device)
-        B = self.data_config['batch_size']
-        self.mesh_node_feats = self.mesh_node_feats.unsqueeze(0).expand([B, -1, -1])
-        self.mesh_edge_feats = self.mesh_edge_feats.unsqueeze(0).expand([B, -1, -1])
-        self.g2m_edge_feats = self.g2m_edge_feats.unsqueeze(0).expand([B, -1, -1])
-        self.m2g_edge_feats = self.m2g_edge_feats.unsqueeze(0).expand([B, -1, -1])
+  
 
         input_channels = self.model_config['variables'] * self.data_config['input_timestamps'] \
                         + self.model_config['forcings'] * (self.data_config['input_timestamps'] + 1) \
@@ -375,10 +374,10 @@ class GraphCast:
     def _init_data(self, mode, output_timestamps=1):
         if mode == 'train':
             hrrr_data = HRRR(self.data_config[mode], self.data_config['input_timestamps'], output_timestamps)
-            data_loader = DataLoader(hrrr_data, batch_size=self.data_config['batch_size'], shuffle=True)                
+            data_loader = DataLoader(hrrr_data, batch_size=self.data_config['train_batch_size'], shuffle=True, drop_last=True)                
         else:
             hrrr_data = HRRR(self.data_config[mode], self.data_config['input_timestamps'], output_timestamps)
-            data_loader = DataLoader(hrrr_data, batch_size=self.data_config['batch_size'])
+            data_loader = DataLoader(hrrr_data, batch_size=self.data_config['valid_batch_size'])
         return data_loader
 
     def _get_criterion(self, steps=1):

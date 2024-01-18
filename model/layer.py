@@ -124,18 +124,31 @@ class G2MGnn(nn.Module):
             latent_dims,
             src_idx,
             dst_idx,
+            model_name='graphcast',
         ):
         super().__init__()
-        self.interaction = InteractionLayer(
-            node_in_channels,
-            node_out_channels,
-            edge_in_channels,
-            edge_out_channels,
-            latent_dims,
-            src_idx,
-            dst_idx,
-            is_homo=False,
-        )
+        if model_name == 'graphcast':
+            self.interaction = InteractionLayer(
+                node_in_channels,
+                node_out_channels,
+                edge_in_channels,
+                edge_out_channels,
+                latent_dims,
+                src_idx,
+                dst_idx,
+                is_homo=False,
+            )
+        else:
+            self.interaction = InteractionLayer2d(
+                node_in_channels,
+                node_out_channels,
+                edge_in_channels,
+                edge_out_channels,
+                latent_dims,
+                src_idx,
+                dst_idx,
+                is_homo=False,
+            )
         self.grid_node_mlp = MLPNet(
             in_channels = node_in_channels,
             out_channels = node_out_channels,
@@ -158,6 +171,7 @@ class Encoder(nn.Module):
         latent_dims,
         src_idx,
         dst_idx,
+        model_name,
     ):
         super().__init__()
         self.feature_embedder = Embedder(
@@ -176,6 +190,7 @@ class Encoder(nn.Module):
             latent_dims=latent_dims,
             src_idx=src_idx,
             dst_idx=dst_idx,
+            model_name=model_name,
         )
 
     def forward(
@@ -210,23 +225,35 @@ class Processor(nn.Module):
         dst_idx,
         clip_edge_idx,
         mesh_connects,
+        model_name='graphcast'
     ):
         super().__init__()
         self.processing_steps = processing_steps
         self.cell_list = nn.Sequential()
         for _ in range(self.processing_steps):
-            self.cell_list.append(InteractionLayer(
-                node_in_channels,
-                node_out_channels,
-                edge_in_channels,
-                edge_out_channels,
-                latent_dims,
-                src_idx,
-                dst_idx,
-                is_homo=True,
-                clip_edge_idx=clip_edge_idx,
-                mesh_connects=mesh_connects,
-            ))
+            if model_name == 'graphcast':
+                self.cell_list.append(InteractionLayer(
+                    node_in_channels,
+                    node_out_channels,
+                    edge_in_channels,
+                    edge_out_channels,
+                    latent_dims,
+                    src_idx,
+                    dst_idx,
+                    is_homo=True,
+                    clip_edge_idx=clip_edge_idx,
+                    mesh_connects=mesh_connects,
+                ))
+            else:
+                self.cell_list.append(InteractionLayer2d(
+                    node_in_channels,
+                    node_out_channels,
+                    edge_in_channels,
+                    edge_out_channels,
+                    latent_dims,
+                    src_idx,
+                    dst_idx,
+                    is_homo=True))
 
     def forward(self, node_feats, edge_feats):
         node_feats, edge_feats = self.cell_list((node_feats, edge_feats))
@@ -242,17 +269,28 @@ class M2Gnn(nn.Module):
         edge_out_channels,
         latent_dims,
         src_idx, 
-        dst_idx
+        dst_idx,
+        model_name='graphcast'
     ):
         super().__init__()
-        self.interaction = InteractionLayer(node_in_channels,
-                                            node_out_channels,
-                                            edge_in_channels,
-                                            edge_out_channels,
-                                            latent_dims,
-                                            src_idx,
-                                            dst_idx,
-                                            is_homo=False)
+        if model_name == 'graphcast':
+            self.interaction = InteractionLayer(node_in_channels,
+                                                node_out_channels,
+                                                edge_in_channels,
+                                                edge_out_channels,
+                                                latent_dims,
+                                                src_idx,
+                                                dst_idx,
+                                                is_homo=False)
+        else:
+            self.interaction = InteractionLayer2d(node_in_channels,
+                                                node_out_channels,
+                                                edge_in_channels,
+                                                edge_out_channels,
+                                                latent_dims,
+                                                src_idx,
+                                                dst_idx,
+                                                is_homo=False)
         self.mesh_node_mlp = MLPNet(in_channels=node_in_channels,
                                     out_channels=node_out_channels,
                                     latent_dims=latent_dims)
@@ -273,6 +311,7 @@ class Decoder(nn.Module):
         latent_dims,
         src_idx,
         dst_idx,
+        model_name,
     ):
         super().__init__()
         self.m2g_gnn = M2Gnn(node_in_channels,
@@ -281,7 +320,8 @@ class Decoder(nn.Module):
                              edge_out_channels,
                              latent_dims,
                              src_idx,
-                             dst_idx,)
+                             dst_idx,
+                             model_name,)
         self.node_fn = MLPNet(in_channels=node_out_channels,
                               out_channels=node_final_dims,
                               latent_dims=latent_dims,
@@ -295,3 +335,48 @@ class Decoder(nn.Module):
         return self.node_fn(grid_node_feats)
     
 
+class InteractionLayer2d(nn.Module):
+    def __init__(
+            self,
+            node_in_channels,
+            node_out_channels,
+            edge_in_channels,
+            edge_out_channels,
+            latent_dims,
+            src_idx,
+            dst_idx,
+            is_homo,
+            clip_edge_idx=None,
+            mesh_connects=None,
+        ):
+        super().__init__()
+
+        # process node
+        self.node_fn = MLPNet(in_channels=node_in_channels + edge_out_channels, out_channels=node_out_channels, latent_dims=latent_dims)
+
+        # process edge
+        self.edge_fn = MLPNet(in_channels=2 * node_in_channels + edge_in_channels, out_channels=edge_out_channels, latent_dims=latent_dims)
+
+        self.src_idx = src_idx
+        self.dst_idx = dst_idx
+        self.is_homo = is_homo
+        self.clip_edge_idx = clip_edge_idx
+        self.mesh_connects = mesh_connects
+    
+    def forward(self, feats):
+        if self.is_homo:
+            src_node_feats, dst_node_feats, edge_feats = feats[0], feats[0], feats[1]
+        else:
+            src_node_feats, dst_node_feats, edge_feats = feats[0], feats[1], feats[2]
+
+        # [batch, grid_num, feat]
+        src_feats = torch.index_select(src_node_feats, dim=1, index=self.src_idx)
+        dst_feats = torch.index_select(dst_node_feats, dim=1, index=self.dst_idx)
+
+        update_edge_feats = self.edge_fn(torch.concat((src_feats, dst_feats, edge_feats), axis=-1))
+        
+        sum_edge_feats = scatter(edge_feats, self.dst_idx, dim=1, reduce='sum')
+
+        update_dst_feats = self.node_fn(torch.concat((dst_node_feats, sum_edge_feats), axis=-1))
+ 
+        return (update_dst_feats + dst_node_feats, update_edge_feats + edge_feats)
